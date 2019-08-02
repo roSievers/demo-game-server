@@ -1,4 +1,4 @@
-# demo-game-server
+# Demo game server
 Implements a multiplayer game website focusing on getting the infrastructure right without worrying
 about the game. The game of choice for this project is [Nim](https://en.wikipedia.org/wiki/Nim)
 with only a single heap.
@@ -9,3 +9,10 @@ is published on the `/static` endpoint and the api is scoped to `/api`.
 
 We publish a websocket connection on `/api/socket` that clients should connect to in order
 to recieve push notifications about changes in games they are part of.
+
+## Running the server
+
+Make sure you have [Rust](https://www.rust-lang.org/) installed, this should come with Cargo.
+Navigate into the root folder of your checkout and execute
+
+    cargo run
