@@ -1,0 +1,10 @@
+[package]
+name = "demo-game-server"
+version = "0.1.0"
+authors = ["Rolf Kreibaum", "Dorothea Müller"]
+edition = "2018"
+
+[dependencies]
+actix-web = "1.0"
+actix-files = "0.1.4"
+actix-http = "0.2.8"
