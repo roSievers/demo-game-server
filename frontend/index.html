@@ -1,1 +1,18 @@
-Hello, <b>index.html</b>!
+<html>
+
+<head>
+  <title>Play NIM!</title>
+  <script type="text/javascript" src="/static/main.js"></script>
+</head>
+
+<body>
+  <h1>Hello, index.html!</h1>
+  <p>We first implement a rudimentary login system. Make sure to open a debug console.</p>
+  <button onclick="fetch_identity()">check identity</button>
+  <button onclick="post_login('rolf', 'rolf')">login as rolf, rolf</button>
+  <button onclick="post_login('doro', 'doro')">login as doro, doro</button>
+  <button onclick="post_login('rolf', 'doro')">login as rolf, doro</button>
+  <button onclick="fetch_logout()">logout</button>
+</body>
+
+</html>

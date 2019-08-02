@@ -1,6 +1,10 @@
 use actix_files::{Files, NamedFile};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
+
+use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use std::sync::Mutex;
+
+use serde::Deserialize;
 
 /// Launches our demo server.
 pub fn main() {
@@ -11,6 +15,13 @@ pub fn main() {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(IdentityService::new(
+                // <- create identity middleware
+                // TODO: Replace [0; 32] by a value read from a secret configuration file
+                CookieIdentityPolicy::new(&[0; 32]) // <- create cookie identity policy
+                    .name("auth-cookie")
+                    .secure(false),
+            ))
             // Register data that is shared between the server threads.
             // Currently this is only some dummy information to mention the concept in the code.
             .register_data(counter.clone()) // <- register the created data
@@ -18,6 +29,9 @@ pub fn main() {
             // We use the actix-files crate to serve static frontend content. Note that we use
             // .show_files_listing() for development which is generally not a good idea for production.
             .service(Files::new("/static", "./frontend/static").show_files_listing())
+            .route("/api/identity", web::get().to(identity))
+            .route("/api/login", web::post().to(login))
+            .route("/api/logout", web::get().to(logout))
             // Serve the index page for all routes that do not match any earlier route.
             // We do not want this to happen to /api/.. routes, so we return a 404 on those first.
             .route("/api", web::get().to(api_error_page))
@@ -59,13 +73,51 @@ fn favicon() -> NamedFile {
 fn api_error_page(req: HttpRequest) -> HttpResponse {
     let error_message = if let Some(tail) = req.match_info().get("tail") {
         if !tail.is_empty() {
-            format!("{{ error: \"ApiNotDefined\", content: \"{}\" }}", tail)
+            format!(
+                "{{ \"error\": \"ApiNotDefined\", \"route\": \"{}\" }}",
+                tail
+            )
         } else {
-            "{ error: \"ApiNotSpecified\" }".to_owned()
+            "{ \"error\": \"ApiNotSpecified\" }".to_owned()
         }
     } else {
-        "{ error: \"ApiNotSpecified\" }".to_owned()
+        "{ \"error\": \"ApiNotSpecified\" }".to_owned()
     };
 
     HttpResponse::NotFound().body(error_message)
+}
+
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+fn identity(id: Identity) -> String {
+    // access request identity
+    if let Some(id) = id.identity() {
+        format!("{{ \"identity\": \"{}\" }}", id)
+    } else {
+        "{ \"username\": null }".to_owned()
+    }
+}
+
+fn login(id: Identity, payload: web::Json<LoginRequest>) -> String {
+    if check_password(&payload) {
+        id.remember(payload.username.clone());
+        identity(id)
+    } else {
+        id.forget();
+        "{ \"error\": \"LoginFailed\" }".to_owned()
+    }
+}
+
+// TODO: Compare the password against a password in a database
+fn check_password(request: &LoginRequest) -> bool {
+    request.username == request.password
+}
+
+fn logout(id: Identity) -> String {
+    id.forget();
+    identity(id)
 }
