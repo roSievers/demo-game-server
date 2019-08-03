@@ -2,11 +2,12 @@ use actix_files::{Files, NamedFile};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use futures::future::Future;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use r2d2_sqlite;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -117,20 +118,18 @@ fn favicon() -> NamedFile {
 /// All /api routes that are not implemented by the server return a 404 response and a JSON object
 /// with a short description of the error.
 fn api_error_page(req: HttpRequest) -> HttpResponse {
-    let error_message = if let Some(tail) = req.match_info().get("tail") {
+    if let Some(tail) = req.match_info().get("tail") {
         if !tail.is_empty() {
-            format!(
-                "{{ \"error\": \"ApiNotDefined\", \"route\": \"{}\" }}",
-                tail
+            HttpResponse::NotFound().json(
+                ComplicatedErrorResult::new("ApiNotDefined".to_owned())
+                    .info("route".to_owned(), tail.to_owned()),
             )
         } else {
-            "{ \"error\": \"ApiNotSpecified\" }".to_owned()
+            HttpResponse::NotFound().json(SimpleErrorResult::api_not_specified())
         }
     } else {
-        "{ \"error\": \"ApiNotSpecified\" }".to_owned()
-    };
-
-    HttpResponse::NotFound().body(error_message)
+        HttpResponse::NotFound().json(SimpleErrorResult::api_not_specified())
+    }
 }
 
 #[derive(Deserialize)]
@@ -139,13 +138,52 @@ struct LoginRequest {
     password: String,
 }
 
-fn identity(id: Identity) -> String {
-    // access request identity
-    if let Some(id) = id.identity() {
-        format!("{{ \"identity\": \"{}\" }}", id)
-    } else {
-        "{ \"username\": null }".to_owned()
+#[derive(Serialize)]
+struct LoginStatusInfo {
+    identity: Option<String>,
+}
+
+#[derive(Serialize)]
+struct SimpleErrorResult {
+    error: String,
+}
+
+impl SimpleErrorResult {
+    fn login_failed() -> Self {
+        SimpleErrorResult {
+            error: "LoginFailed".to_owned(),
+        }
     }
+    fn api_not_specified() -> Self {
+        SimpleErrorResult {
+            error: "ApiNotSpecified".to_owned(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ComplicatedErrorResult {
+    error: String,
+    parameter: HashMap<String, String>,
+}
+
+impl ComplicatedErrorResult {
+    fn new(error: String) -> Self {
+        Self {
+            error,
+            parameter: HashMap::new(),
+        }
+    }
+    fn info(mut self, key: String, value: String) -> Self {
+        self.parameter.insert(key, value);
+        self
+    }
+}
+
+fn identity(id: Identity) -> HttpResponse {
+    HttpResponse::Ok().json(LoginStatusInfo {
+        identity: id.identity(),
+    })
 }
 
 fn login(
@@ -159,19 +197,22 @@ fn login(
 
     result
         .map_err(actix_web::Error::from)
-        .map(|is_password_correct| {
+        .map(move |is_password_correct| {
             if is_password_correct {
-                id.remember(username);
-                identity(id)
+                id.remember(username.clone());
+
+                HttpResponse::Ok().json(LoginStatusInfo {
+                    identity: Some(username),
+                })
             } else {
                 id.forget();
-                "{ \"error\": \"LoginFailed\" }".to_owned()
+
+                HttpResponse::Unauthorized().json(SimpleErrorResult::login_failed())
             }
         })
-        .map(|result| HttpResponse::Ok().body(result))
 }
 
-fn logout(id: Identity) -> String {
+fn logout(id: Identity) -> HttpResponse {
     id.forget();
     identity(id)
 }

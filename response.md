@@ -7,11 +7,12 @@ Depending on the error, the response may carry additional fields.
 
     {"error":"ApiNotSpecified"}
     {"error":"ApiNotDefined","route":"some/route/that/does/not/exist"}
+    {"error":"LoginFailed"}
 
 ## Identity token
 
 We use identity token to manage logins. The /api/identity endpoint returns the current identity.
 
-    {"username":null}
+    {"identity":null}
     {"identity":"rolf"}
     {"error":"LoginFailed"}
