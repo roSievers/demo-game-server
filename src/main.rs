@@ -16,7 +16,11 @@ use db::Pool;
 
 /// Launches our demo server.
 pub fn main() {
-    // Initialize shared server state
+    // Read configuration file. This contains secrets and variable parameters.
+    let config = Config::read_configuration().unwrap();
+    let server_address = config.server_address();
+
+    // Initialize shared server state (Not used right now, carried allong from the tutorial for reference.)
     let counter = web::Data::new(AppStateWithCounter {
         counter: Mutex::new(0),
     });
@@ -30,8 +34,7 @@ pub fn main() {
             .data(pool.clone())
             .wrap(IdentityService::new(
                 // <- create identity middleware
-                // TODO: Replace [0; 32] by a value read from a secret configuration file
-                CookieIdentityPolicy::new(&[0; 32]) // <- create cookie identity policy
+                CookieIdentityPolicy::new(config.security.identity_cookie_secret.as_bytes()) // <- create cookie identity policy
                     .name("auth-cookie")
                     .secure(false),
             ))
@@ -52,10 +55,40 @@ pub fn main() {
             .route("favicon.ico", web::get().to(favicon))
             .route("/{tail:.*}", web::get().to(index_page))
     })
-    .bind("127.0.0.1:8088")
+    .bind(server_address)
     .unwrap()
     .run()
     .unwrap();
+}
+
+#[derive(Deserialize, Clone)]
+struct Config {
+    ip: String,
+    port: u16,
+    security: SecurityConfig,
+}
+
+#[derive(Deserialize, Clone)]
+struct SecurityConfig {
+    identity_cookie_secret: String,
+    hashing_iteration_count: u32,
+}
+
+impl Config {
+    fn server_address(&self) -> String {
+        format!("{}:{}", self.ip, self.port)
+    }
+
+    fn read_configuration() -> std::io::Result<Self> {
+        use std::fs::File;
+        use std::io::prelude::*;
+
+        let mut file = File::open("./home/config.toml")?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        Ok(toml::from_str(&contents).unwrap())
+    }
 }
 
 /// This is a placeholder for the "server state shared among threads" concept.

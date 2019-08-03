@@ -26,12 +26,15 @@ Currently it only contains one table you need to create yourself:
         "password"	TEXT
     )
 
-You shoud insert the following data to create a user "rolf" with password "judita" and a user
+You should insert the following data to create a user "rolf" with password "judita" and a user
 "doro" with password "florian".
 
     username password
     rolf     $rpbkdf2$0$AAAnEA==$Wih697v+F5NJGvnRIldzLw==$Bqx2PYzgR5Dg+wBELKRsmt/HaV9LZXQ4QcYK70HNbsU=$
     doro     $rpbkdf2$0$AAAnEA==$O/nqIkH/YIm/EzV8CfMIPA==$rN7hmPd3gmanCApEXQtsCd4SqA6+EKAu6HGqyvFJp50=$
+
+Next you must copy the `/setup/config.toml` file into your `home` folder and follow the instructions
+inside.
 
 Then navigate into the root folder of your checkout and execute
 

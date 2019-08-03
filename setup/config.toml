@@ -1,0 +1,8 @@
+ip = "127.0.0.1"
+port = 8088
+
+[security]
+# Please generate a random key yourself. The key must be at least 32 characters long or the
+# server will not launch.
+identity_cookie_secret = "vaiNg0ae"
+hashing_iteration_count = 10_000
