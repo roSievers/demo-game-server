@@ -4,7 +4,15 @@ use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use std::sync::Mutex;
 
+use futures::future::Future;
+
 use serde::Deserialize;
+
+use r2d2_sqlite;
+use r2d2_sqlite::SqliteConnectionManager;
+
+mod db;
+use db::Pool;
 
 /// Launches our demo server.
 pub fn main() {
@@ -13,8 +21,13 @@ pub fn main() {
         counter: Mutex::new(0),
     });
 
+    // Start N db executor actors (N = number of cores avail)
+    let manager = SqliteConnectionManager::file("./home/nim.db");
+    let pool = Pool::new(manager).unwrap();
+
     HttpServer::new(move || {
         App::new()
+            .data(pool.clone())
             .wrap(IdentityService::new(
                 // <- create identity middleware
                 // TODO: Replace [0; 32] by a value read from a secret configuration file
@@ -30,7 +43,7 @@ pub fn main() {
             // .show_files_listing() for development which is generally not a good idea for production.
             .service(Files::new("/static", "./frontend/static").show_files_listing())
             .route("/api/identity", web::get().to(identity))
-            .route("/api/login", web::post().to(login))
+            .route("/api/login", web::post().to_async(login))
             .route("/api/logout", web::get().to(logout))
             // Serve the index page for all routes that do not match any earlier route.
             // We do not want this to happen to /api/.. routes, so we return a 404 on those first.
@@ -102,19 +115,27 @@ fn identity(id: Identity) -> String {
     }
 }
 
-fn login(id: Identity, payload: web::Json<LoginRequest>) -> String {
-    if check_password(&payload) {
-        id.remember(payload.username.clone());
-        identity(id)
-    } else {
-        id.forget();
-        "{ \"error\": \"LoginFailed\" }".to_owned()
-    }
-}
+fn login(
+    id: Identity,
+    payload: web::Json<LoginRequest>,
+    db: web::Data<Pool>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+    let username = payload.username.clone();
 
-// TODO: Compare the password against a password in a database
-fn check_password(request: &LoginRequest) -> bool {
-    request.username == request.password
+    let result = db::check_password(payload.username.clone(), payload.password.clone(), &db);
+
+    result
+        .map_err(actix_web::Error::from)
+        .map(|is_password_correct| {
+            if is_password_correct {
+                id.remember(username);
+                identity(id)
+            } else {
+                id.forget();
+                "{ \"error\": \"LoginFailed\" }".to_owned()
+            }
+        })
+        .map(|result| HttpResponse::Ok().body(result))
 }
 
 fn logout(id: Identity) -> String {
