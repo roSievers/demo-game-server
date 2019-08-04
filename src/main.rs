@@ -14,6 +14,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 mod db;
 use db::Pool;
+mod nim;
 
 /// Launches our demo server.
 pub fn main() {
