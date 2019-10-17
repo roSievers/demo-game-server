@@ -1,18 +1,13 @@
 <html>
 
 <head>
-  <title>Play NIM!</title>
-  <script type="text/javascript" src="/static/main.js"></script>
+  <script type="text/javascript" src="/static/elm.js"></script>
 </head>
 
 <body>
-  <h1>Hello, index.html!</h1>
-  <p>We first implement a rudimentary login system. Make sure to open a debug console.</p>
-  <button onclick="fetch_identity()">check identity</button>
-  <button onclick="post_login('rolf', 'judita')">login as rolf, pw=judita</button>
-  <button onclick="post_login('doro', 'florian')">login as doro, pw=florian</button>
-  <button onclick="post_login('rolf', 'doro')">login as rolf, pw=doro</button>
-  <button onclick="fetch_logout()">logout</button>
+  <script>
+    let app = Elm.Main.init();
+  </script>
 </body>
 
 </html>

@@ -39,3 +39,9 @@ inside.
 Then navigate into the root folder of your checkout and execute
 
     cargo run
+
+## Rebuilding the frontend
+
+Make sure you have [Elm](https://elm-lang.org/) installed. Then run the following in the root folder.
+
+    elm make --output=frontend/static/elm.js ui/Main.elm

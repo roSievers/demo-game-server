@@ -11,3 +11,8 @@ Cargo.lock
 
 # The home folder contains the configuration and the database, this should not be published
 /home
+
+# Elm excludes
+elm.json
+/elm-stuff/
+frontend/static/elm.js
