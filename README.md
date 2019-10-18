@@ -17,21 +17,8 @@ to recieve push notifications about changes in games they are part of.
 
 Make sure you have [Rust](https://www.rust-lang.org/) installed, this should come with Cargo.
 
-You will need to prepare a sqlite database in `/home/nim.db` that stores the users.
-Currently it only contains one table you need to create yourself:
-
-    CREATE TABLE "users" (
-        "id"	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-        "username"	INTEGER NOT NULL UNIQUE,
-        "password"	TEXT
-    )
-
-You should insert the following data to create a user "rolf" with password "judita" and a user
-"doro" with password "florian".
-
-    username password
-    rolf     $rpbkdf2$0$AAAnEA==$Wih697v+F5NJGvnRIldzLw==$Bqx2PYzgR5Dg+wBELKRsmt/HaV9LZXQ4QcYK70HNbsU=$
-    doro     $rpbkdf2$0$AAAnEA==$O/nqIkH/YIm/EzV8CfMIPA==$rN7hmPd3gmanCApEXQtsCd4SqA6+EKAu6HGqyvFJp50=$
+You will need to prepare a sqlite database in `/home/nim.db` by running `/setup/install.sql`.
+This creates a user "rolf" with password "judita" and a user "doro" with password "florian".
 
 Next you must copy the `/setup/config.toml` file into your `home` folder and follow the instructions
 inside.
@@ -45,3 +32,5 @@ Then navigate into the root folder of your checkout and execute
 Make sure you have [Elm](https://elm-lang.org/) installed. Then run the following in the root folder.
 
     elm make --output=frontend/static/elm.js ui/Main.elm
+
+During development, you can run this through `watch`, as the elm compiler is very fast.

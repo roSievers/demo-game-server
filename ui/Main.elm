@@ -1,13 +1,16 @@
 module Main exposing (main)
 
 import Browser
-import Browser.Navigation
+import Browser.Navigation as Navigation
 import Element exposing (Element)
+import Element.Events as Events
 import Element.Input as Input
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Url exposing (Url)
+import Url.Builder as Url
+import Url.Parser as Parse exposing ((</>), Parser)
 
 
 main : Program Value Model Msg
@@ -22,20 +25,28 @@ main =
         }
 
 
+type GameId
+    = GameId Int
+
+
+type Route
+    = Dashboard
+    | SingleGame GameId
+
+
 type alias Model =
     { taco : Taco
     , usernameField : String
     , passwordField : String
+    , gameList : List GameHeader
+    , route : Route
     }
 
 
 type alias Taco =
     { username : Maybe String
+    , navKey : Navigation.Key
     }
-
-
-emptyTaco =
-    { username = Nothing }
 
 
 type Msg
@@ -47,19 +58,31 @@ type Msg
     | TypePassword String
     | TryLogin
     | Logout
+    | LoadGameList
+    | GameListSuccess (List GameHeader)
+    | OpenSingleGame GameId
+    | OpenDashboard
+    | ChangedUrl Url
 
 
-init : Value -> Url -> Browser.Navigation.Key -> ( Model, Cmd Msg )
-init flags _ _ =
+init : Value -> Url -> Navigation.Key -> ( Model, Cmd Msg )
+init flags _ navKey =
     let
         identity =
             Decode.decodeValue decodeIdentity flags
                 |> Result.withDefault Nothing
 
         taco =
-            { username = identity }
+            { username = identity, navKey = navKey }
     in
-    ( { taco = taco, usernameField = "", passwordField = "" }, Cmd.none )
+    ( { taco = taco
+      , usernameField = ""
+      , passwordField = ""
+      , gameList = []
+      , route = Dashboard
+      }
+    , Cmd.none
+    )
 
 
 view : Model -> Browser.Document Msg
@@ -80,8 +103,8 @@ onUrlRequest _ =
 
 
 onUrlChange : Url -> Msg
-onUrlChange _ =
-    NoOp
+onUrlChange url =
+    ChangedUrl url
 
 
 
@@ -100,7 +123,7 @@ update msg model =
             ( { model | taco = loginTaco username model.taco }, Cmd.none )
 
         HttpError error ->
-            ( model, Cmd.none )
+            Debug.log "Http Error" (Debug.toString error) |> (\_ -> ( model, Cmd.none ))
 
         LogoutSuccess ->
             ( { model | taco = logoutTaco model.taco }, Cmd.none )
@@ -117,6 +140,44 @@ update msg model =
         Logout ->
             ( model, logout )
 
+        LoadGameList ->
+            ( model, loadGameList )
+
+        GameListSuccess gameList ->
+            ( { model | gameList = gameList }, Cmd.none )
+
+        OpenSingleGame (GameId gameId) ->
+            ( { model | route = SingleGame (GameId gameId) }
+            , Navigation.pushUrl model.taco.navKey
+                (Url.absolute [ "game", String.fromInt gameId ] [])
+            )
+
+        OpenDashboard ->
+            ( { model | route = Dashboard }, Navigation.pushUrl model.taco.navKey "/" )
+
+        ChangedUrl url ->
+            case Parse.parse route url of
+                Just newRoute ->
+                    ( { model | route = newRoute }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+
+singleGameRoute : Parser (GameId -> a) a
+singleGameRoute =
+    Parse.s "game"
+        </> Parse.int
+        |> Parse.map GameId
+
+
+route : Parser (Route -> a) a
+route =
+    Parse.oneOf
+        [ Parse.map Dashboard Parse.top
+        , Parse.map SingleGame singleGameRoute
+        ]
+
 
 
 -------------------------------------------------------------------------------
@@ -126,8 +187,20 @@ update msg model =
 
 document : Model -> Element Msg
 document model =
+    case model.route of
+        Dashboard ->
+            dashboard model
+
+        SingleGame gameId ->
+            singleGame model gameId
+
+
+dashboard : Model -> Element Msg
+dashboard model =
     Element.column []
         [ loginInfo model
+        , Input.button [] { label = Element.text "List Games", onPress = Just LoadGameList }
+        , gameOverviewTable model.gameList
         ]
 
 
@@ -166,6 +239,56 @@ loginMessage _ name =
     Element.column []
         [ Element.text ("Hello, " ++ name)
         , Input.button [] { label = Element.text "Logout", onPress = Just Logout }
+        ]
+
+
+gameOverviewTable : List GameHeader -> Element Msg
+gameOverviewTable list =
+    let
+        idCol =
+            { header = Element.text "id"
+            , width = Element.fill
+            , view = \game -> Element.text (String.fromInt game.id)
+            }
+
+        playerCol =
+            { header = Element.text "player"
+            , width = Element.fill
+            , view = \game -> Element.text game.owner
+            }
+
+        descriptionCol =
+            { header = Element.text "description"
+            , width = Element.fill
+            , view = \game -> Element.el [ Events.onClick (OpenSingleGame (GameId game.id)) ] (Element.text game.description)
+            }
+    in
+    Element.table []
+        { data = list
+        , columns = [ idCol, playerCol, descriptionCol ]
+        }
+
+
+singleGame : Model -> GameId -> Element Msg
+singleGame model (GameId id) =
+    let
+        maybeGame =
+            model.gameList
+                |> List.filter (\game -> game.id == id)
+                |> List.head
+
+        gameElement =
+            case maybeGame of
+                Just game ->
+                    Element.text game.description
+
+                Nothing ->
+                    Element.text ("There is no game with id " ++ String.fromInt id)
+    in
+    Element.column []
+        [ Element.text (String.fromInt id)
+        , Input.button [] { label = Element.text "Return to Dashboard", onPress = Just OpenDashboard }
+        , gameElement
         ]
 
 
@@ -220,7 +343,7 @@ defaultErrorHandler happyPath result =
             happyPath username
 
         Err error ->
-            Debug.log (Debug.toString error) (HttpError error)
+            HttpError error
 
 
 logout : Cmd Msg
@@ -228,6 +351,43 @@ logout =
     Http.get
         { url = "/api/logout"
         , expect = Http.expectJson (defaultErrorHandler (\() -> LogoutSuccess)) decodeLogout
+        }
+
+
+type alias GameHeader =
+    { id : Int
+    , owner : String
+    , description : String
+    }
+
+
+decodeGameHeader : Decode.Decoder GameHeader
+decodeGameHeader =
+    Decode.map3 GameHeader
+        (Decode.field "id" Decode.int)
+        (Decode.field "owner" Decode.string)
+        (Decode.field "description" Decode.string)
+
+
+encodeGameHeader : GameHeader -> Encode.Value
+encodeGameHeader record =
+    Encode.object
+        [ ( "id", Encode.int <| record.id )
+        , ( "owner", Encode.string <| record.owner )
+        , ( "description", Encode.string <| record.description )
+        ]
+
+
+decodeGameList : Decoder (List GameHeader)
+decodeGameList =
+    Decode.list decodeGameHeader
+
+
+loadGameList : Cmd Msg
+loadGameList =
+    Http.get
+        { url = "/api/game/list"
+        , expect = Http.expectJson (defaultErrorHandler GameListSuccess) decodeGameList
         }
 
 

@@ -16,7 +16,9 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 mod db;
 use db::Pool;
+mod dto;
 mod nim;
+mod types;
 
 /// Launches our demo server.
 pub fn main() {
@@ -52,6 +54,8 @@ pub fn main() {
             .route("/api/identity", web::get().to(identity))
             .route("/api/login", web::post().to_async(login))
             .route("/api/logout", web::get().to(logout))
+            .route("/api/game/create", web::post().to_async(create_game))
+            .route("/api/game/list", web::get().to_async(list_games))
             // Serve the index page for all routes that do not match any earlier route.
             // We do not want this to happen to /api/.. routes, so we return a 404 on those first.
             .route("/api", web::get().to(api_error_page))
@@ -232,4 +236,38 @@ fn index_page(id: Identity) -> HttpResponse {
 
     let s = hello.render().unwrap();
     HttpResponse::Ok().content_type("text/html").body(s)
+}
+
+/// CRUD for games
+
+fn create_game(
+    id: Identity,
+    payload: web::Json<types::GameHeader>,
+    db: web::Data<Pool>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+    // TODO: Check the user
+
+    let result = db::create_game(payload.clone(), &db);
+
+    result.map_err(actix_web::Error::from).map(move |id| {
+        let result: types::WithID<types::GameHeader> = types::WithID {
+            id,
+            data: payload.clone(),
+        };
+        HttpResponse::Ok().json(result)
+    })
+}
+
+fn list_games(
+    id: Identity,
+    db: web::Data<Pool>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+    // TODO: Check the user
+
+    let result = db::all_games(&db);
+
+    result.map_err(actix_web::Error::from).map(move |games| {
+        let result = games;
+        HttpResponse::Ok().json(result)
+    })
 }
