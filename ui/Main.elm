@@ -10,7 +10,7 @@ import Json.Encode as Encode exposing (Value)
 import Url exposing (Url)
 
 
-main : Program () Model Msg
+main : Program Value Model Msg
 main =
     Browser.application
         { init = init
@@ -49,9 +49,17 @@ type Msg
     | Logout
 
 
-init : () -> Url -> Browser.Navigation.Key -> ( Model, Cmd Msg )
-init _ _ _ =
-    ( { taco = emptyTaco, usernameField = "", passwordField = "" }, Cmd.none )
+init : Value -> Url -> Browser.Navigation.Key -> ( Model, Cmd Msg )
+init flags _ _ =
+    let
+        identity =
+            Decode.decodeValue decodeIdentity flags
+                |> Result.withDefault Nothing
+
+        taco =
+            { username = identity }
+    in
+    ( { taco = taco, usernameField = "", passwordField = "" }, Cmd.none )
 
 
 view : Model -> Browser.Document Msg
@@ -184,6 +192,11 @@ encodeLoginData record =
 decodeUserName : Decoder String
 decodeUserName =
     Decode.field "identity" Decode.string
+
+
+decodeIdentity : Decoder (Maybe String)
+decodeIdentity =
+    Decode.field "identity" (Decode.maybe Decode.string)
 
 
 decodeLogout : Decoder ()

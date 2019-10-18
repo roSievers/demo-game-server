@@ -1,0 +1,15 @@
+<html>
+
+<head>
+  <script type="text/javascript" src="/static/elm.js"></script>
+</head>
+
+<body>
+  <script>
+    let flags = {{ flags|json }};
+
+    let app = Elm.Main.init({ flags: flags });
+  </script>
+</body>
+
+</html>

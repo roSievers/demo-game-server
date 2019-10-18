@@ -5,6 +5,8 @@ use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use askama::Template;
+
 use futures::future::Future;
 
 use serde::{Deserialize, Serialize};
@@ -104,11 +106,6 @@ fn count_page(data: web::Data<AppStateWithCounter>) -> String {
     *counter += 1; // <- access counter inside MutexGuard
 
     format!("Request number: {}", counter) // <- response with count
-}
-
-/// Returns the index.html page. The file is reloaded from disk each time it is requested.
-fn index_page() -> NamedFile {
-    NamedFile::open("./frontend/index.html").unwrap()
 }
 
 /// Returns the favicon. The file is reloaded from disk each time it is requested.
@@ -216,4 +213,23 @@ fn login(
 fn logout(id: Identity) -> HttpResponse {
     id.forget();
     identity(id)
+}
+
+#[derive(Template)]
+#[template(path = "index.askama", escape = "html")]
+struct HelloTemplate {
+    flags: LoginStatusInfo,
+}
+
+/// Returns the index.html page. The file is created by askama and may contain
+/// information in the javascript that is passed via flags to elm.
+fn index_page(id: Identity) -> HttpResponse {
+    let info = LoginStatusInfo {
+        identity: id.identity(),
+    };
+
+    let hello = HelloTemplate { flags: info };
+
+    let s = hello.render().unwrap();
+    HttpResponse::Ok().content_type("text/html").body(s)
 }
