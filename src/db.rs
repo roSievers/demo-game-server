@@ -59,47 +59,31 @@ fn create_game_(game: types::GameHeader, conn: Connection) -> Result<i64, Error>
     Ok(last_id)
 }
 
-pub fn get_game(
-    id: i64,
-    pool: &Pool,
-) -> impl Future<Item = Option<types::GameHeader>, Error = actix_web::Error> {
-    let pool = pool.clone();
-    web::block(move || get_game_(id, pool.get()?)).from_err()
-}
-
-fn get_game_(id: i64, conn: Connection) -> Result<Option<types::GameHeader>, Error> {
-    let mut stmt = conn.prepare("SELECT owner, description FROM game WHERE id = ?1")?;
-    let game_iter = stmt.query_map(params![id], |row| {
-        Ok(types::GameHeader {
-            owner: row.get(0)?,
-            description: row.get(1)?,
-        })
-    })?;
-
-    for game in game_iter {
-        return Ok(Some(game?));
-    }
-    Ok(None)
-}
-
-pub fn all_games(
+pub fn games_by_user(
+    username: String,
     pool: &Pool,
 ) -> impl Future<Item = Vec<dto::GameHeader>, Error = actix_web::Error> {
     let pool = pool.clone();
-    web::block(move || all_games_(pool.get()?)).from_err()
+    web::block(move || games_by_user_(&username, &pool.get()?)).from_err()
 }
 
-fn all_games_(conn: Connection) -> Result<Vec<dto::GameHeader>, Error> {
+/// This function takes a user id and returns all games that the user is a member of.
+fn games_by_user_(username: &str, conn: &Connection) -> Result<Vec<dto::GameHeader>, Error> {
     let mut stmt = conn.prepare(
-        "select game.id, user.username, game.description from game \
-         inner join user on user.id = game.owner",
+        "select game.id, game.description from game \
+         inner join game_member on game_member.game = game.id \
+         inner join user on user.id = game_member.user \
+         where user.username = ?1",
     )?;
 
-    let game_iter = stmt.query_map(params![], |row| {
+    // println!("{:?}", stmt);
+
+    let game_iter = stmt.query_map(params![username], |row| {
+        let id = row.get(0)?;
         Ok(dto::GameHeader {
-            id: row.get(0)?,
-            owner: row.get(1)?,
-            description: row.get(2)?,
+            id,
+            description: row.get(1)?,
+            members: members_by_game_(id, conn)?,
         })
     })?;
 
@@ -108,4 +92,25 @@ fn all_games_(conn: Connection) -> Result<Vec<dto::GameHeader>, Error> {
         result.push(game?);
     }
     Ok(result)
+}
+
+/// This function takes a game id and returns all members of the game.
+fn members_by_game_(game: i64, conn: &Connection) -> Result<Vec<dto::Member>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "select user.id, user.username, game_member.role from game_member \
+         inner join user on user.id = game_member.user \
+         where game_member.game = ?1",
+    )?;
+    let member_iter = stmt.query_map(params![game], |row| {
+        Ok(dto::Member {
+            id: row.get(0)?,
+            username: row.get(1)?,
+            role: row.get(2)?,
+        })
+    })?;
+    let mut members = Vec::new();
+    for member in member_iter {
+        members.push(member?);
+    }
+    Ok(members)
 }

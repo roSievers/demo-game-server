@@ -8,15 +8,17 @@ CREATE TABLE IF NOT EXISTS `user` (
 	`password`	TEXT
 );
 
-INSERT INTO `user` (username,password) VALUES ('rolf','$rpbkdf2$0$AAAnEA==$Wih697v+F5NJGvnRIldzLw==$Bqx2PYzgR5Dg+wBELKRsmt/HaV9LZXQ4QcYK70HNbsU=$');
-INSERT INTO `user` (username,password) VALUES ('doro','$rpbkdf2$0$AAAnEA==$O/nqIkH/YIm/EzV8CfMIPA==$rN7hmPd3gmanCApEXQtsCd4SqA6+EKAu6HGqyvFJp50=$');
+INSERT INTO `user` (id, username,password) VALUES ('rolf','$rpbkdf2$0$AAAnEA==$Wih697v+F5NJGvnRIldzLw==$Bqx2PYzgR5Dg+wBELKRsmt/HaV9LZXQ4QcYK70HNbsU=$');
+INSERT INTO `user` (id, username,password) VALUES ('doro','$rpbkdf2$0$AAAnEA==$O/nqIkH/YIm/EzV8CfMIPA==$rN7hmPd3gmanCApEXQtsCd4SqA6+EKAu6HGqyvFJp50=$');
 
 CREATE TABLE IF NOT EXISTS `game` (
 	`id`	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-	`owner`	INTEGER,
-	`description`	TEXT NOT NULL,
-	FOREIGN KEY(`owner`) REFERENCES `user`(`id`)
+	`description`	TEXT NOT NULL
 );
+
+INSERT INTO `game` (id, description) VALUES (1, `A shared game`);
+INSERT INTO `game` (id, description) VALUES (2, `Rolf's game`);
+INSERT INTO `game` (id, description) VALUES (3, `Doro's game`);
 
 CREATE TABLE IF NOT EXISTS `game_data` (
 	`id`	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
@@ -24,3 +26,20 @@ CREATE TABLE IF NOT EXISTS `game_data` (
 	`data`	TEXT NOT NULL,
 	FOREIGN KEY(`game`) REFERENCES `game`(`id`)
 );
+
+CREATE TABLE IF NOT EXISTS `game_member` (
+    `user`  INTEGER NOT NULL,
+    `game`  INTEGER NOT NULL,
+    `role`  INTEGER NOT NULL,
+    UNIQUE(`user`,`game`)
+);
+
+-- Both players join game 1, rolf is player 1, doro is player 2
+INSERT INTO `game_member` (user, game, role) VALUES (1, 1, 1);
+INSERT INTO `game_member` (user, game, role) VALUES (2, 1, 2);
+
+-- Only rolf joins game 2, he is player 1
+INSERT INTO `game_member` (user, game, role) VALUES (1, 2, 1);
+
+-- Only doro joins game 3, she is player 1
+INSERT INTO `game_member` (user, game, role) VALUES (2, 3, 1);

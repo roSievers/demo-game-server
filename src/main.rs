@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use askama::Template;
 
-use futures::future::Future;
+use futures::Future;
 
 use serde::{Deserialize, Serialize};
 
@@ -156,6 +156,11 @@ impl SimpleErrorResult {
             error: "LoginFailed".to_owned(),
         }
     }
+    fn not_logged_in() -> Self {
+        SimpleErrorResult {
+            error: "NotLoggedIn".to_owned(),
+        }
+    }
     fn api_not_specified() -> Self {
         SimpleErrorResult {
             error: "ApiNotSpecified".to_owned(),
@@ -261,13 +266,19 @@ fn create_game(
 fn list_games(
     id: Identity,
     db: web::Data<Pool>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
-    // TODO: Check the user
+) -> Box<dyn Future<Item = HttpResponse, Error = actix_web::Error>> {
+    if let Some(user) = id.identity() {
+        let result = db::games_by_user(user, &db);
 
-    let result = db::all_games(&db);
-
-    result.map_err(actix_web::Error::from).map(move |games| {
-        let result = games;
-        HttpResponse::Ok().json(result)
-    })
+        // note that we need to box the result as the two different branches return
+        // a different type.
+        return Box::new(result.map_err(actix_web::Error::from).map(move |games| {
+            let result = games;
+            HttpResponse::Ok().json(result)
+        }));
+    } else {
+        return Box::new(futures::future::ok(
+            HttpResponse::Unauthorized().json(SimpleErrorResult::not_logged_in()),
+        ));
+    }
 }

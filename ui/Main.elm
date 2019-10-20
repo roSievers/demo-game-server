@@ -126,7 +126,7 @@ update msg model =
             Debug.log "Http Error" (Debug.toString error) |> (\_ -> ( model, Cmd.none ))
 
         LogoutSuccess ->
-            ( { model | taco = logoutTaco model.taco }, Cmd.none )
+            ( { model | taco = logoutTaco model.taco, gameList = [] }, Cmd.none )
 
         TypeUsername rawInput ->
             ( { model | usernameField = rawInput }, Cmd.none )
@@ -252,9 +252,14 @@ gameOverviewTable list =
             }
 
         playerCol =
-            { header = Element.text "player"
+            { header = Element.text "players"
             , width = Element.fill
-            , view = \game -> Element.text game.owner
+            , view =
+                \game ->
+                    game.members
+                        |> List.map (\member -> member.username)
+                        |> String.join ", "
+                        |> Element.text
             }
 
         descriptionCol =
@@ -356,8 +361,8 @@ logout =
 
 type alias GameHeader =
     { id : Int
-    , owner : String
     , description : String
+    , members : List GameMember
     }
 
 
@@ -365,17 +370,23 @@ decodeGameHeader : Decode.Decoder GameHeader
 decodeGameHeader =
     Decode.map3 GameHeader
         (Decode.field "id" Decode.int)
-        (Decode.field "owner" Decode.string)
         (Decode.field "description" Decode.string)
+        (Decode.field "members" (Decode.list decodeGameMember))
 
 
-encodeGameHeader : GameHeader -> Encode.Value
-encodeGameHeader record =
-    Encode.object
-        [ ( "id", Encode.int <| record.id )
-        , ( "owner", Encode.string <| record.owner )
-        , ( "description", Encode.string <| record.description )
-        ]
+type alias GameMember =
+    { id : Int
+    , username : String
+    , role : Int
+    }
+
+
+decodeGameMember : Decode.Decoder GameMember
+decodeGameMember =
+    Decode.map3 GameMember
+        (Decode.field "id" Decode.int)
+        (Decode.field "username" Decode.string)
+        (Decode.field "role" Decode.int)
 
 
 decodeGameList : Decoder (List GameHeader)
