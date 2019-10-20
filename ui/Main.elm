@@ -217,7 +217,7 @@ loginInfo model =
 loginDialog : Model -> Element Msg
 loginDialog model =
     Element.column []
-        [ Input.text []
+        [ Input.username []
             { label = Input.labelAbove [] (Element.text "Username")
             , onChange = TypeUsername
             , placeholder = Just (Input.placeholder [] (Element.text "Username"))
