@@ -5,7 +5,6 @@ use futures::Future;
 use r2d2;
 use r2d2_sqlite;
 use rusqlite::params;
-use std::convert::TryInto;
 
 /// Database module
 ///

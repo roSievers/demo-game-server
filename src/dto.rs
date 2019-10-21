@@ -1,6 +1,5 @@
 /// This file defines data transfer objects.
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 
 /// The information required to display a game in an overview table.
 #[derive(Serialize, Deserialize)]
