@@ -55,6 +55,7 @@ pub fn main() {
             .route("/api/logout", web::get().to(logout))
             .route("/api/game/create", web::post().to_async(create_game))
             .route("/api/game/list", web::get().to_async(list_games))
+            .route("/api/game/{id}", web::get().to_async(game_details))
             // Serve the index page for all routes that do not match any earlier route.
             // We do not want this to happen to /api/.. routes, so we return a 404 on those first.
             .route("/api", web::get().to(api_error_page))
@@ -282,4 +283,17 @@ fn list_games(
             HttpResponse::Unauthorized().json(SimpleErrorResult::not_logged_in()),
         ));
     }
+}
+
+fn game_details(
+    path: web::Path<(i64,)>,
+    // id: Identity,
+    db: web::Data<Pool>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+    let game = db::game(path.0, &db);
+
+    // TODO: Implement private games that are only visible to members.
+
+    game.map_err(actix_web::Error::from)
+        .map(move |game| HttpResponse::Ok().json(game))
 }

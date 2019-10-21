@@ -92,8 +92,6 @@ fn games_by_user_(username: &str, conn: &Connection) -> Result<Vec<dto::GameHead
          where user.username = ?1",
     )?;
 
-    // println!("{:?}", stmt);
-
     let game_iter = stmt.query_map(params![username], |row| {
         let id = row.get(0)?;
         Ok(dto::GameHeader {
@@ -129,4 +127,33 @@ fn members_by_game_(game: i64, conn: &Connection) -> Result<Vec<dto::Member>, ru
         members.push(member?);
     }
     Ok(members)
+}
+
+pub fn game(
+    game_id: i64,
+    pool: &Pool,
+) -> impl Future<Item = Option<dto::GameHeader>, Error = actix_web::Error> {
+    let pool = pool.clone();
+    web::block(move || game_(game_id, &pool.get()?)).from_err()
+}
+
+fn game_(game_id: i64, conn: &Connection) -> Result<Option<dto::GameHeader>, Error> {
+    let mut stmt = conn.prepare(
+        "select game.description from game \
+         where game.id = ?1",
+    )?;
+
+    let mut game_iter = stmt.query_map(params![game_id], |row| {
+        Ok(dto::GameHeader {
+            id: game_id,
+            description: row.get(0)?,
+            members: members_by_game_(game_id, conn)?,
+        })
+    })?;
+
+    if let Some(row) = game_iter.next() {
+        Ok(Some(row?))
+    } else {
+        Ok(None)
+    }
 }
