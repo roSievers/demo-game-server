@@ -66,6 +66,7 @@ type Msg
     | Logout
     | LoadGameList
     | GameListSuccess (List GameHeader)
+    | GameSuccess (Maybe GameHeader)
     | OpenSingleGame GameId
     | OpenDashboard
     | ChangedUrl Url
@@ -74,7 +75,7 @@ type Msg
 
 
 init : Value -> Url -> Navigation.Key -> ( Model, Cmd Msg )
-init flags _ navKey =
+init flags url navKey =
     let
         identity =
             Decode.decodeValue decodeIdentity flags
@@ -82,16 +83,37 @@ init flags _ navKey =
 
         taco =
             { username = identity, navKey = navKey }
+
+        ( newRoute, cmd ) =
+            initRoute url
     in
     ( { taco = taco
       , usernameField = ""
       , passwordField = ""
       , newGameDescriptionField = ""
       , gameList = []
-      , route = Dashboard
+      , route = newRoute
       }
-    , Cmd.none
+    , cmd
     )
+
+
+initRoute : Url -> ( Route, Cmd Msg )
+initRoute url =
+    let
+        newRoute =
+            Parse.parse route url
+                |> Maybe.withDefault Dashboard
+
+        cmd =
+            case newRoute of
+                Dashboard ->
+                    Cmd.none
+
+                SingleGame gameId ->
+                    loadGame gameId
+    in
+    ( newRoute, cmd )
 
 
 view : Model -> Browser.Document Msg
@@ -183,6 +205,14 @@ update msg model =
 
         GameCreated newGame ->
             ( { model | gameList = newGame :: model.gameList }, Cmd.none )
+
+        GameSuccess game ->
+            case game of
+                Just newGame ->
+                    ( { model | gameList = newGame :: model.gameList }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
 
 singleGameRoute : Parser (GameId -> a) a
@@ -560,6 +590,14 @@ loadGameList =
     Http.get
         { url = "/api/game/list"
         , expect = Http.expectJson (defaultErrorHandler GameListSuccess) decodeGameList
+        }
+
+
+loadGame : GameId -> Cmd Msg
+loadGame (GameId id) =
+    Http.get
+        { url = "/api/game/" ++ String.fromInt id
+        , expect = Http.expectJson (defaultErrorHandler GameSuccess) (Decode.maybe decodeGameHeader)
         }
 
 
