@@ -2,9 +2,13 @@ module Main exposing (main)
 
 import Browser
 import Browser.Navigation as Navigation
-import Element exposing (Element, spacing)
+import Element exposing (Attribute, Element, spacing)
 import Element.Events as Events
+import Element.Font as Font
 import Element.Input as Input
+import FontAwesome.Icon as Icon exposing (Icon)
+import FontAwesome.Solid as Solid
+import FontAwesome.Styles
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -93,7 +97,10 @@ init flags _ navKey =
 view : Model -> Browser.Document Msg
 view model =
     { title = "Demo Game Client"
-    , body = [ Element.layout [] <| document model ]
+    , body =
+        [ FontAwesome.Styles.css
+        , Element.layout [] <| document model
+        ]
     }
 
 
@@ -321,7 +328,7 @@ singleGame model (GameId id) =
         gameElement =
             case maybeGame of
                 Just game ->
-                    Element.text game.description
+                    gameDetailView model game
 
                 Nothing ->
                     Element.text ("There is no game with id " ++ String.fromInt id)
@@ -331,6 +338,69 @@ singleGame model (GameId id) =
         , Input.button [] { label = Element.text "Return to Dashboard", onPress = Just OpenDashboard }
         , gameElement
         ]
+
+
+gameDetailView : Model -> GameHeader -> Element Msg
+gameDetailView _ game =
+    Element.column [ spacing 15 ]
+        [ Element.text game.description
+        , memberTable game
+        ]
+
+
+memberTable : GameHeader -> Element Msg
+memberTable game =
+    let
+        idCol =
+            { header = Element.text "id"
+            , width = Element.fill
+            , view = \member -> Element.text (String.fromInt member.id)
+            }
+
+        nameCol =
+            { header = Element.text "username"
+            , width = Element.fill
+            , view = \member -> Element.text member.username
+            }
+
+        roleCol =
+            { header = Element.text "role"
+            , width = Element.fill
+            , view = \member -> roleTag member.role
+            }
+    in
+    Element.table []
+        { data = game.members
+        , columns = [ idCol, nameCol, roleCol ]
+        }
+
+
+roleTag : MemberRole -> Element msg
+roleTag role =
+    case role of
+        WhitePlayer ->
+            Element.row []
+                [ icon [ Font.color (Element.rgb 0.9 0.9 0.9) ] Solid.chessQueen
+                , Element.text "WhitePlayer"
+                ]
+
+        BlackPlayer ->
+            Element.row [] [ icon [] Solid.chessQueen, Element.text "BlackPlayer" ]
+
+        Watcher ->
+            Element.row [] [ icon [] Solid.eye, Element.text "Watcher" ]
+
+        Invited ->
+            Element.row [] [ icon [] Solid.envelope, Element.text "Invited" ]
+
+
+icon : List (Attribute msg) -> Icon -> Element msg
+icon attributes iconSvg =
+    iconSvg
+        |> Icon.present
+        |> Icon.view
+        |> Element.html
+        |> Element.el attributes
 
 
 
