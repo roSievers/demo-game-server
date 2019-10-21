@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Navigation as Navigation
+import Dict exposing (Dict)
 import Element exposing (Attribute, Element, spacing)
 import Element.Events as Events
 import Element.Font as Font
@@ -12,6 +13,7 @@ import FontAwesome.Styles
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import RemoteData exposing (WebData)
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parse exposing ((</>), Parser)
@@ -43,7 +45,8 @@ type alias Model =
     , usernameField : String
     , passwordField : String
     , newGameDescriptionField : String
-    , gameList : List GameHeader
+    , gameHeaderCache : Dict Int (WebData GameHeader)
+    , gameList : WebData (List GameId)
     , route : Route
     }
 
@@ -83,37 +86,36 @@ init flags url navKey =
 
         taco =
             { username = identity, navKey = navKey }
-
-        ( newRoute, cmd ) =
-            initRoute url
     in
-    ( { taco = taco
-      , usernameField = ""
-      , passwordField = ""
-      , newGameDescriptionField = ""
-      , gameList = []
-      , route = newRoute
-      }
-    , cmd
-    )
+    { taco = taco
+    , usernameField = ""
+    , passwordField = ""
+    , newGameDescriptionField = ""
+    , gameHeaderCache = Dict.empty
+    , gameList = RemoteData.NotAsked
+    , route = Dashboard -- Overwritten by initRoute
+    }
+        |> initRoute url
 
 
-initRoute : Url -> ( Route, Cmd Msg )
-initRoute url =
+initRoute : Url -> Model -> ( Model, Cmd Msg )
+initRoute url model =
     let
         newRoute =
             Parse.parse route url
                 |> Maybe.withDefault Dashboard
-
-        cmd =
-            case newRoute of
-                Dashboard ->
-                    Cmd.none
-
-                SingleGame gameId ->
-                    loadGame gameId
     in
-    ( newRoute, cmd )
+    case newRoute of
+        Dashboard ->
+            ( { model | route = newRoute }, Cmd.none )
+
+        SingleGame (GameId gameId) ->
+            ( { model
+                | route = newRoute
+                , gameHeaderCache = Dict.insert gameId RemoteData.Loading model.gameHeaderCache
+              }
+            , loadGame (GameId gameId)
+            )
 
 
 view : Model -> Browser.Document Msg
@@ -160,7 +162,7 @@ update msg model =
             Debug.log "Http Error" (Debug.toString error) |> (\_ -> ( model, Cmd.none ))
 
         LogoutSuccess ->
-            ( { model | taco = logoutTaco model.taco, gameList = [] }, Cmd.none )
+            ( { model | taco = logoutTaco model.taco, gameList = RemoteData.NotAsked }, Cmd.none )
 
         TypeUsername rawInput ->
             ( { model | usernameField = rawInput }, Cmd.none )
@@ -175,10 +177,10 @@ update msg model =
             ( model, logout )
 
         LoadGameList ->
-            ( model, loadGameList )
+            ( { model | gameList = RemoteData.Loading }, loadGameList )
 
         GameListSuccess gameList ->
-            ( { model | gameList = gameList }, Cmd.none )
+            ( replaceReceivedGameList gameList model, Cmd.none )
 
         OpenSingleGame (GameId gameId) ->
             ( { model | route = SingleGame (GameId gameId) }
@@ -204,15 +206,56 @@ update msg model =
             ( model, createGame model )
 
         GameCreated newGame ->
-            ( { model | gameList = newGame :: model.gameList }, Cmd.none )
+            ( appendReceivedGameList newGame model, Cmd.none )
 
         GameSuccess game ->
             case game of
                 Just newGame ->
-                    ( { model | gameList = newGame :: model.gameList }, Cmd.none )
+                    ( updateGameHeaderCache [ newGame ] model, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
+
+
+appendReceivedGameList : GameHeader -> Model -> Model
+appendReceivedGameList game model =
+    let
+        newGameList =
+            case model.gameList of
+                RemoteData.Success oldGameList ->
+                    GameId game.id :: oldGameList
+
+                _ ->
+                    [ GameId game.id ]
+    in
+    { model | gameList = RemoteData.Success newGameList }
+        |> updateGameHeaderCache [ game ]
+
+
+replaceReceivedGameList : List GameHeader -> Model -> Model
+replaceReceivedGameList games model =
+    let
+        newGameList =
+            games |> List.map (\game -> GameId game.id)
+    in
+    { model | gameList = RemoteData.Success newGameList }
+        |> updateGameHeaderCache games
+
+
+updateGameHeaderCache : List GameHeader -> Model -> Model
+updateGameHeaderCache games model =
+    let
+        asDict =
+            games
+                |> List.map (\game -> ( game.id, RemoteData.Success game ))
+                |> Dict.fromList
+
+        newCache =
+            -- The order of the dicts is important. If there is a collision,
+            -- preference is given to the first (newer) dictionary.
+            Dict.union asDict model.gameHeaderCache
+    in
+    { model | gameHeaderCache = newCache }
 
 
 singleGameRoute : Parser (GameId -> a) a
@@ -259,8 +302,37 @@ gameOverview : Model -> Element Msg
 gameOverview model =
     Element.column []
         [ Input.button [] { label = Element.text "List Games", onPress = Just LoadGameList }
-        , gameOverviewTable model.gameList
+        , gameOverviewStatus model
         ]
+
+
+{-| Extract the list of games as GameHeaders from the model, so that the WebData
+monad is wrapping it only once on the outside.
+-}
+gameHeaderList : Model -> WebData (List GameHeader)
+gameHeaderList model =
+    -- TODO: This is a high complexity function that needs a refactoring.
+    RemoteData.andThen
+        (List.map (\(GameId id) -> Dict.get id model.gameHeaderCache |> Maybe.withDefault RemoteData.NotAsked)
+            >> RemoteData.fromList
+        )
+        model.gameList
+
+
+gameOverviewStatus : Model -> Element Msg
+gameOverviewStatus model =
+    case gameHeaderList model of
+        RemoteData.NotAsked ->
+            Element.text "The game list was never requested."
+
+        RemoteData.Loading ->
+            Element.text "The game list is currently loading."
+
+        RemoteData.Failure _ ->
+            Element.text "An error occured while loading the game list."
+
+        RemoteData.Success gameList ->
+            gameOverviewTable gameList
 
 
 loginInfo : Model -> Element Msg
@@ -351,17 +423,22 @@ singleGame : Model -> GameId -> Element Msg
 singleGame model (GameId id) =
     let
         maybeGame =
-            model.gameList
-                |> List.filter (\game -> game.id == id)
-                |> List.head
+            Dict.get id model.gameHeaderCache
+                |> Maybe.withDefault RemoteData.NotAsked
 
         gameElement =
             case maybeGame of
-                Just game ->
-                    gameDetailView model game
+                RemoteData.NotAsked ->
+                    Element.text "Game not available. Try refreshing the page."
 
-                Nothing ->
-                    Element.text ("There is no game with id " ++ String.fromInt id)
+                RemoteData.Loading ->
+                    Element.text "Loading game in progress..."
+
+                RemoteData.Failure _ ->
+                    Element.text "Error while loading game."
+
+                RemoteData.Success game ->
+                    gameDetailView model game
     in
     Element.column []
         [ Element.text (String.fromInt id)
