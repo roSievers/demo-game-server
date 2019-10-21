@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Navigation as Navigation
-import Element exposing (Element)
+import Element exposing (Element, spacing)
 import Element.Events as Events
 import Element.Input as Input
 import Http
@@ -38,6 +38,7 @@ type alias Model =
     { taco : Taco
     , usernameField : String
     , passwordField : String
+    , newGameDescriptionField : String
     , gameList : List GameHeader
     , route : Route
     }
@@ -56,6 +57,7 @@ type Msg
     | HttpError Http.Error
     | TypeUsername String
     | TypePassword String
+    | TypeNewGameDescription String
     | TryLogin
     | Logout
     | LoadGameList
@@ -63,6 +65,8 @@ type Msg
     | OpenSingleGame GameId
     | OpenDashboard
     | ChangedUrl Url
+    | CreateGame
+    | GameCreated GameHeader
 
 
 init : Value -> Url -> Navigation.Key -> ( Model, Cmd Msg )
@@ -78,6 +82,7 @@ init flags _ navKey =
     ( { taco = taco
       , usernameField = ""
       , passwordField = ""
+      , newGameDescriptionField = ""
       , gameList = []
       , route = Dashboard
       }
@@ -163,6 +168,15 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        TypeNewGameDescription rawString ->
+            ( { model | newGameDescriptionField = rawString }, Cmd.none )
+
+        CreateGame ->
+            ( model, createGame model )
+
+        GameCreated newGame ->
+            ( { model | gameList = newGame :: model.gameList }, Cmd.none )
+
 
 singleGameRoute : Parser (GameId -> a) a
 singleGameRoute =
@@ -197,9 +211,17 @@ document model =
 
 dashboard : Model -> Element Msg
 dashboard model =
-    Element.column []
+    Element.column [ spacing 15 ]
         [ loginInfo model
-        , Input.button [] { label = Element.text "List Games", onPress = Just LoadGameList }
+        , gameOverview model
+        , gameCreationDialog model
+        ]
+
+
+gameOverview : Model -> Element Msg
+gameOverview model =
+    Element.column []
+        [ Input.button [] { label = Element.text "List Games", onPress = Just LoadGameList }
         , gameOverviewTable model.gameList
         ]
 
@@ -272,6 +294,20 @@ gameOverviewTable list =
         { data = list
         , columns = [ idCol, playerCol, descriptionCol ]
         }
+
+
+gameCreationDialog : Model -> Element Msg
+gameCreationDialog model =
+    Element.column []
+        [ Element.text "Create new game"
+        , Input.text []
+            { label = Input.labelAbove [] (Element.text "Game Description")
+            , onChange = TypeNewGameDescription
+            , placeholder = Just (Input.placeholder [] (Element.text "Name or short description"))
+            , text = model.newGameDescriptionField
+            }
+        , Input.button [] { label = Element.text "Create Game", onPress = Just CreateGame }
+        ]
 
 
 singleGame : Model -> GameId -> Element Msg
@@ -399,6 +435,26 @@ loadGameList =
     Http.get
         { url = "/api/game/list"
         , expect = Http.expectJson (defaultErrorHandler GameListSuccess) decodeGameList
+        }
+
+
+type alias GameCreate =
+    { description : String }
+
+
+encodeGameCreate : GameCreate -> Value
+encodeGameCreate record =
+    Encode.object
+        [ ( "description", Encode.string <| record.description )
+        ]
+
+
+createGame : Model -> Cmd Msg
+createGame model =
+    Http.post
+        { url = "/api/game/create"
+        , body = Http.jsonBody (encodeGameCreate { description = model.newGameDescriptionField })
+        , expect = Http.expectJson (defaultErrorHandler GameCreated) decodeGameHeader
         }
 
 

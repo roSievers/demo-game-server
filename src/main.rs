@@ -18,7 +18,6 @@ mod db;
 use db::Pool;
 mod dto;
 mod nim;
-mod types;
 
 /// Launches our demo server.
 pub fn main() {
@@ -247,20 +246,22 @@ fn index_page(id: Identity) -> HttpResponse {
 
 fn create_game(
     id: Identity,
-    payload: web::Json<types::GameHeader>,
+    create_info: web::Json<dto::GameCreate>,
     db: web::Data<Pool>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
-    // TODO: Check the user
+) -> Box<dyn Future<Item = HttpResponse, Error = actix_web::Error>> {
+    if let Some(user) = id.identity() {
+        let result = db::create_game(user, create_info.clone(), &db);
 
-    let result = db::create_game(payload.clone(), &db);
-
-    result.map_err(actix_web::Error::from).map(move |id| {
-        let result: types::WithID<types::GameHeader> = types::WithID {
-            id,
-            data: payload.clone(),
-        };
-        HttpResponse::Ok().json(result)
-    })
+        return Box::new(
+            result
+                .map_err(actix_web::Error::from)
+                .map(move |result| HttpResponse::Ok().json(result)),
+        );
+    } else {
+        return Box::new(futures::future::ok(
+            HttpResponse::Unauthorized().json(SimpleErrorResult::not_logged_in()),
+        ));
+    }
 }
 
 fn list_games(

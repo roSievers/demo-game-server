@@ -1,5 +1,4 @@
 use super::dto;
-use super::types;
 use actix_web::web;
 use failure::Error;
 use futures::Future;
@@ -42,21 +41,38 @@ fn check_password_(username: &str, password: &str, conn: Connection) -> Result<b
 }
 
 pub fn create_game(
-    game: types::GameHeader,
+    username: String,
+    game: dto::GameCreate,
     pool: &Pool,
-) -> impl Future<Item = i64, Error = actix_web::Error> {
+) -> impl Future<Item = dto::GameHeader, Error = actix_web::Error> {
     let pool = pool.clone();
-    web::block(move || create_game_(game, pool.get()?)).from_err()
+    web::block(move || create_game_(username, game, &pool.get()?)).from_err()
 }
 
-fn create_game_(game: types::GameHeader, conn: Connection) -> Result<i64, Error> {
+fn create_game_(
+    username: String,
+    game: dto::GameCreate,
+    conn: &Connection,
+) -> Result<dto::GameHeader, Error> {
     conn.execute(
-        "INSERT INTO game (owner, description) VALUES (?1, ?2)",
-        params![game.owner, game.description],
+        "INSERT INTO game (description) VALUES (?1)",
+        params![game.description],
     )?;
-    let last_id = conn.last_insert_rowid();
+    let game_id = conn.last_insert_rowid();
 
-    Ok(last_id)
+    let default_role = 1;
+
+    conn.execute(
+        "INSERT INTO game_member (user, game, role) VALUES \
+         ((select id from user where username = ?1), ?2, ?3)",
+        params![username, game_id, default_role],
+    )?;
+
+    Ok(dto::GameHeader {
+        id: game_id,
+        description: game.description,
+        members: members_by_game_(game_id, conn)?,
+    })
 }
 
 pub fn games_by_user(
