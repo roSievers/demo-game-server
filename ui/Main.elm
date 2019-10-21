@@ -339,6 +339,61 @@ singleGame model (GameId id) =
 -------------------------------------------------------------------------------
 
 
+{-| Determines how a user is connected to a game.
+-}
+type MemberRole
+    = WhitePlayer
+    | BlackPlayer
+    | Watcher
+    | Invited
+
+
+fromStringMemberRole : String -> Decoder MemberRole
+fromStringMemberRole string =
+    case string of
+        "BlackPlayer" ->
+            Decode.succeed BlackPlayer
+
+        "Invited" ->
+            Decode.succeed Invited
+
+        "Watcher" ->
+            Decode.succeed Watcher
+
+        "WhitePlayer" ->
+            Decode.succeed WhitePlayer
+
+        _ ->
+            Decode.fail ("Not valid pattern for decoder to MemberRole. Pattern: " ++ string)
+
+
+toStringMemberRole : MemberRole -> String
+toStringMemberRole role =
+    case role of
+        WhitePlayer ->
+            "WhitePlayer"
+
+        BlackPlayer ->
+            "BlackPlayer"
+
+        Watcher ->
+            "Watcher"
+
+        Invited ->
+            "Invited"
+
+
+decodeMemberRole : Decoder MemberRole
+decodeMemberRole =
+    Decode.string
+        |> Decode.andThen fromStringMemberRole
+
+
+encodeMemberRole : MemberRole -> Value
+encodeMemberRole role =
+    Encode.string (toStringMemberRole role)
+
+
 type alias LoginData =
     { username : String
     , password : String
@@ -413,7 +468,7 @@ decodeGameHeader =
 type alias GameMember =
     { id : Int
     , username : String
-    , role : Int
+    , role : MemberRole
     }
 
 
@@ -422,7 +477,7 @@ decodeGameMember =
     Decode.map3 GameMember
         (Decode.field "id" Decode.int)
         (Decode.field "username" Decode.string)
-        (Decode.field "role" Decode.int)
+        (Decode.field "role" decodeMemberRole)
 
 
 decodeGameList : Decoder (List GameHeader)
