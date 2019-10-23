@@ -56,6 +56,7 @@ pub fn main() {
             .route("/api/game/create", web::post().to_async(create_game))
             .route("/api/game/list", web::get().to_async(list_games))
             .route("/api/game/{id}", web::get().to_async(game_details))
+            .route("/api/user/friends", web::get().to_async(friends_list))
             // Serve the index page for all routes that do not match any earlier route.
             // We do not want this to happen to /api/.. routes, so we return a 404 on those first.
             .route("/api", web::get().to(api_error_page))
@@ -296,4 +297,16 @@ fn game_details(
 
     game.map_err(actix_web::Error::from)
         .map(move |game| HttpResponse::Ok().json(game))
+}
+
+fn friends_list(
+    // id: Identity,
+    db: web::Data<Pool>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+    // TODO: Until we implement "friendship", all users are your friends.
+    let users = db::all_users(&db);
+
+    users
+        .map_err(actix_web::Error::from)
+        .map(move |users| HttpResponse::Ok().json(users))
 }

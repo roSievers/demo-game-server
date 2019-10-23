@@ -157,3 +157,25 @@ fn game_(game_id: i64, conn: &Connection) -> Result<Option<dto::GameHeader>, Err
         Ok(None)
     }
 }
+
+pub fn all_users(pool: &Pool) -> impl Future<Item = Vec<dto::UserInfo>, Error = actix_web::Error> {
+    let pool = pool.clone();
+    web::block(move || all_users_(&pool.get()?)).from_err()
+}
+
+fn all_users_(conn: &Connection) -> Result<Vec<dto::UserInfo>, Error> {
+    let mut stmt = conn.prepare("select id, username from user")?;
+
+    let user_iter = stmt.query_map(params![], |row| {
+        Ok(dto::UserInfo {
+            id: row.get(0)?,
+            username: row.get(1)?,
+        })
+    })?;
+
+    let mut users = Vec::new();
+    for user in user_iter {
+        users.push(user?);
+    }
+    Ok(users)
+}

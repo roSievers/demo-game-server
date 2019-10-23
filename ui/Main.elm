@@ -48,6 +48,7 @@ type alias Model =
     , gameHeaderCache : Dict Int (WebData GameHeader)
     , gameList : WebData (List GameId)
     , route : Route
+    , friends : WebData (List UserInfo)
     }
 
 
@@ -70,11 +71,13 @@ type Msg
     | LoadGameList
     | GameListSuccess (List GameHeader)
     | GameSuccess (Maybe GameHeader)
+    | FriendListSuccess (List UserInfo)
     | OpenSingleGame GameId
     | OpenDashboard
     | ChangedUrl Url
     | CreateGame
     | GameCreated GameHeader
+    | ReloadFriends
 
 
 init : Value -> Url -> Navigation.Key -> ( Model, Cmd Msg )
@@ -94,6 +97,7 @@ init flags url navKey =
     , gameHeaderCache = Dict.empty
     , gameList = RemoteData.NotAsked
     , route = Dashboard -- Overwritten by initRoute
+    , friends = RemoteData.NotAsked
     }
         |> initRoute url
 
@@ -215,6 +219,12 @@ update msg model =
 
                 Nothing ->
                     ( model, Cmd.none )
+
+        FriendListSuccess friends ->
+            ( { model | friends = RemoteData.Success friends }, Cmd.none )
+
+        ReloadFriends ->
+            ( { model | friends = RemoteData.Loading }, loadFriendList )
 
 
 appendReceivedGameList : GameHeader -> Model -> Model
@@ -444,7 +454,35 @@ singleGame model (GameId id) =
         [ Element.text (String.fromInt id)
         , Input.button [] { label = Element.text "Return to Dashboard", onPress = Just OpenDashboard }
         , gameElement
+        , friendList model
         ]
+
+
+friendList : Model -> Element Msg
+friendList model =
+    Element.column []
+        ([ Element.text "Invite friends to this game."
+         , Input.button [] { label = Element.text "Refresh friends list", onPress = Just ReloadFriends }
+         ]
+            ++ actualFriendList model
+        )
+
+
+actualFriendList : Model -> List (Element Msg)
+actualFriendList model =
+    case model.friends of
+        RemoteData.NotAsked ->
+            [ Element.text "Please refresh your friends list" ]
+
+        RemoteData.Loading ->
+            [ Element.text "Friend list is currently loading" ]
+
+        RemoteData.Failure _ ->
+            [ Element.text "Error while loading friends list. Try refreshing." ]
+
+        RemoteData.Success friends ->
+            friends
+                |> List.map (\friend -> Element.text friend.username)
 
 
 gameDetailView : Model -> GameHeader -> Element Msg
@@ -695,6 +733,27 @@ createGame model =
         { url = "/api/game/create"
         , body = Http.jsonBody (encodeGameCreate { description = model.newGameDescriptionField })
         , expect = Http.expectJson (defaultErrorHandler GameCreated) decodeGameHeader
+        }
+
+
+type alias UserInfo =
+    { id : Int
+    , username : String
+    }
+
+
+decodeUserInfo : Decoder UserInfo
+decodeUserInfo =
+    Decode.map2 UserInfo
+        (Decode.field "id" Decode.int)
+        (Decode.field "username" Decode.string)
+
+
+loadFriendList : Cmd Msg
+loadFriendList =
+    Http.get
+        { url = "/api/user/friends"
+        , expect = Http.expectJson (defaultErrorHandler FriendListSuccess) (Decode.list decodeUserInfo)
         }
 
 

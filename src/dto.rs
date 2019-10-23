@@ -17,6 +17,13 @@ pub struct GameCreate {
     pub description: String,
 }
 
+/// Publicly available information about a user.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub id: i64,
+    pub username: String,
+}
+
 /// A game can have several members with different roles.
 #[derive(Serialize, Deserialize)]
 pub struct Member {
@@ -56,11 +63,5 @@ impl rusqlite::types::ToSql for MemberRole {
         use rusqlite::types::ToSqlOutput::Owned;
         use rusqlite::types::Value::Integer;
         Ok(Owned(Integer(*self as i64)))
-        // Ok(Owned(Integer(match self {
-        //     Self::WhitePlayer => 1,
-        //     Self::BlackPlayer => 2,
-        //     Self::Watcher => 3,
-        //     Self::Invited => 4,
-        // })))
     }
 }
