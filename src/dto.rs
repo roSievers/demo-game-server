@@ -25,7 +25,8 @@ pub struct UserInfo {
 }
 
 /// A game can have several members with different roles.
-#[derive(Serialize, Deserialize)]
+/// TODO: Rename to GameMember
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Member {
     pub id: i64,
     pub username: String,
@@ -33,7 +34,7 @@ pub struct Member {
 }
 
 /// The integers should be server only, the tags should be send to the client.
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum MemberRole {
     WhitePlayer = 1,
     BlackPlayer = 2,
@@ -64,4 +65,13 @@ impl rusqlite::types::ToSql for MemberRole {
         use rusqlite::types::Value::Integer;
         Ok(Owned(Integer(*self as i64)))
     }
+}
+
+/// This type can be send to a game, the server will try to update the game
+/// accordingly. A Setup Message can already be send before the game is running.
+/// TODO: Consider only having a single message type for client -> server requests.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SetupMessage {
+    SetDescription(String),
+    UpdateMember(Member),
 }

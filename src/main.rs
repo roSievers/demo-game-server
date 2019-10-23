@@ -56,6 +56,8 @@ pub fn main() {
             .route("/api/game/create", web::post().to_async(create_game))
             .route("/api/game/list", web::get().to_async(list_games))
             .route("/api/game/{id}", web::get().to_async(game_details))
+            .route("/api/game/{id}/setup", web::post().to_async(game_setup))
+            .route("/api/dummy", web::get().to_async(dummy_example))
             .route("/api/user/friends", web::get().to_async(friends_list))
             // Serve the index page for all routes that do not match any earlier route.
             // We do not want this to happen to /api/.. routes, so we return a 404 on those first.
@@ -309,4 +311,46 @@ fn friends_list(
     users
         .map_err(actix_web::Error::from)
         .map(move |users| HttpResponse::Ok().json(users))
+}
+
+fn game_setup(
+    path: web::Path<(i64,)>,
+    setup_message: web::Json<dto::SetupMessage>,
+    id: Identity,
+    db: web::Data<Pool>,
+) -> Box<dyn Future<Item = HttpResponse, Error = actix_web::Error>> {
+    use dto::SetupMessage::*;
+    println!("{:?}", setup_message);
+
+    if let Some(user) = id.identity() {
+        return match setup_message.clone() {
+            SetDescription(new_description) => Box::new(
+                db::update_description(user, path.0, new_description, &db)
+                    .map_err(actix_web::Error::from)
+                    .map(|()| HttpResponse::Ok().json(())),
+            ),
+            UpdateMember(_) => Box::new(futures::future::ok(HttpResponse::Ok().json(()))),
+        };
+    } else {
+        return Box::new(futures::future::ok(
+            HttpResponse::Unauthorized().json(SimpleErrorResult::not_logged_in()),
+        ));
+    }
+}
+
+/// This route is used during development if I want an easy way to view some
+/// response in the browser.
+fn dummy_example(// id: Identity,
+    // db: web::Data<Pool>,
+) -> Box<dyn Future<Item = HttpResponse, Error = actix_web::Error>> {
+    let messages = vec![
+        dto::SetupMessage::SetDescription("Hello".to_owned()),
+        dto::SetupMessage::UpdateMember(dto::Member {
+            id: 99,
+            username: "Rolf".to_owned(),
+            role: dto::MemberRole::Watcher,
+        }),
+    ];
+
+    Box::new(futures::future::ok(HttpResponse::Ok().json(messages)))
 }

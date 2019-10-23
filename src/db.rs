@@ -179,3 +179,52 @@ fn all_users_(conn: &Connection) -> Result<Vec<dto::UserInfo>, Error> {
     }
     Ok(users)
 }
+
+pub fn update_description(
+    username: String,
+    game_id: i64,
+    new_description: String,
+    pool: &Pool,
+) -> impl Future<Item = (), Error = actix_web::Error> {
+    let pool = pool.clone();
+    web::block(move || update_description_(username, game_id, new_description, &pool.get()?))
+        .from_err()
+}
+
+fn update_description_(
+    username: String,
+    game_id: i64,
+    new_description: String,
+    conn: &Connection,
+) -> Result<(), Error> {
+    // TODO: The database module will contain business logic, until actix
+    // updates to async await. Then we can will it outside.
+
+    // Check if the user is a member of the game
+    let user_id = get_user_id_(username, conn)?;
+    let members = members_by_game_(game_id, conn)?;
+
+    if members.iter().any(|member| Some(member.id) == user_id) {
+        conn.execute(
+            "update game set description = ?1 where id = ?2",
+            params![new_description, game_id],
+        )?;
+
+        Ok(())
+    } else {
+        // TODO: Fail with error
+        Ok(())
+    }
+}
+
+fn get_user_id_(username: String, conn: &Connection) -> Result<Option<i64>, Error> {
+    let mut stmt = conn.prepare("select id from user where username = ?1")?;
+
+    let mut user_iter = stmt.query_map(params![username], |row| Ok(row.get(0)?))?;
+
+    if let Some(row) = user_iter.next() {
+        Ok(Some(row?))
+    } else {
+        Ok(None)
+    }
+}

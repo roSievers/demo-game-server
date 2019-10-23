@@ -45,6 +45,7 @@ type alias Model =
     , usernameField : String
     , passwordField : String
     , newGameDescriptionField : String
+    , changeGameDescription : Maybe String
     , gameHeaderCache : Dict Int (WebData GameHeader)
     , gameList : WebData (List GameId)
     , route : Route
@@ -65,7 +66,12 @@ type Msg
     | HttpError Http.Error
     | TypeUsername String
     | TypePassword String
+      -- In the game creation dialog
     | TypeNewGameDescription String
+      -- In the existing game, change the game description
+    | TypeUpdateGameDescription String
+    | SaveUpdateGameDescription GameId String
+    | CancelUpdateGameDescription
     | TryLogin
     | Logout
     | LoadGameList
@@ -78,6 +84,7 @@ type Msg
     | CreateGame
     | GameCreated GameHeader
     | ReloadFriends
+    | GameReload GameId
 
 
 init : Value -> Url -> Navigation.Key -> ( Model, Cmd Msg )
@@ -94,6 +101,7 @@ init flags url navKey =
     , usernameField = ""
     , passwordField = ""
     , newGameDescriptionField = ""
+    , changeGameDescription = Nothing
     , gameHeaderCache = Dict.empty
     , gameList = RemoteData.NotAsked
     , route = Dashboard -- Overwritten by initRoute
@@ -225,6 +233,20 @@ update msg model =
 
         ReloadFriends ->
             ( { model | friends = RemoteData.Loading }, loadFriendList )
+
+        GameReload gameId ->
+            ( model, loadGame gameId )
+
+        TypeUpdateGameDescription rawString ->
+            ( { model | changeGameDescription = Just rawString }, Cmd.none )
+
+        SaveUpdateGameDescription gameId newDescription ->
+            ( { model | changeGameDescription = Nothing }
+            , postSetupMessage gameId (SetDescription newDescription)
+            )
+
+        CancelUpdateGameDescription ->
+            ( { model | changeGameDescription = Nothing }, Cmd.none )
 
 
 appendReceivedGameList : GameHeader -> Model -> Model
@@ -451,8 +473,7 @@ singleGame model (GameId id) =
                     gameDetailView model game
     in
     Element.column []
-        [ Element.text (String.fromInt id)
-        , Input.button [] { label = Element.text "Return to Dashboard", onPress = Just OpenDashboard }
+        [ Input.button [] { label = Element.text "Return to Dashboard", onPress = Just OpenDashboard }
         , gameElement
         , friendList model
         ]
@@ -486,11 +507,33 @@ actualFriendList model =
 
 
 gameDetailView : Model -> GameHeader -> Element Msg
-gameDetailView _ game =
+gameDetailView model game =
     Element.column [ spacing 15 ]
-        [ Element.text game.description
+        [ gameDescriptionView model game
         , memberTable game
         ]
+
+
+gameDescriptionView : Model -> GameHeader -> Element Msg
+gameDescriptionView model game =
+    case model.changeGameDescription of
+        Nothing ->
+            Element.el
+                [ Events.onClick (TypeUpdateGameDescription game.description)
+                ]
+                (Element.text game.description)
+
+        Just newDescription ->
+            Element.row [ spacing 5 ]
+                [ Input.text []
+                    { label = Input.labelHidden "Game Description"
+                    , onChange = TypeUpdateGameDescription
+                    , placeholder = Just (Input.placeholder [] (Element.text "Update the game description"))
+                    , text = newDescription
+                    }
+                , icon [ Events.onClick (SaveUpdateGameDescription (GameId game.id) newDescription) ] Solid.check
+                , icon [ Events.onClick CancelUpdateGameDescription ] Solid.times
+                ]
 
 
 memberTable : GameHeader -> Element Msg
@@ -695,6 +738,15 @@ decodeGameMember =
         (Decode.field "role" decodeMemberRole)
 
 
+encodeGameMember : GameMember -> Value
+encodeGameMember gameMember =
+    Encode.object
+        [ ( "id", Encode.int <| gameMember.id )
+        , ( "username", Encode.string <| gameMember.username )
+        , ( "role", encodeMemberRole <| gameMember.role )
+        ]
+
+
 decodeGameList : Decoder (List GameHeader)
 decodeGameList =
     Decode.list decodeGameHeader
@@ -754,6 +806,33 @@ loadFriendList =
     Http.get
         { url = "/api/user/friends"
         , expect = Http.expectJson (defaultErrorHandler FriendListSuccess) (Decode.list decodeUserInfo)
+        }
+
+
+type SetupMessage
+    = SetDescription String
+    | UpdateMember GameMember
+
+
+encodeSetupMessage : SetupMessage -> Value
+encodeSetupMessage message =
+    case message of
+        SetDescription description ->
+            Encode.object [ ( "SetDescription", Encode.string <| description ) ]
+
+        UpdateMember member ->
+            Encode.object [ ( "UpdateMember", encodeGameMember <| member ) ]
+
+
+postSetupMessage : GameId -> SetupMessage -> Cmd Msg
+postSetupMessage (GameId gameId) message =
+    Http.post
+        { url = "/api/game/" ++ String.fromInt gameId ++ "/setup"
+        , body = Http.jsonBody (encodeSetupMessage message)
+
+        -- TODO: Here I will need a type like SetupMessage but for server
+        -- responses. This will make more sense one I get a Websocket running.
+        , expect = Http.expectJson (defaultErrorHandler (\() -> GameReload (GameId gameId))) (Decode.succeed ())
         }
 
 
