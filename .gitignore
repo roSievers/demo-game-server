@@ -13,6 +13,5 @@ Cargo.lock
 /home
 
 # Elm excludes
-elm.json
 /elm-stuff/
 frontend/static/elm.js
