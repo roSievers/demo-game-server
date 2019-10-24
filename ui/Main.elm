@@ -532,16 +532,34 @@ userIsMember userId game =
 
 inviteListEntry : GameHeader -> UserInfo -> Element Msg
 inviteListEntry game userInfo =
-    Element.row
-        [ spacing 5
-        , Events.onClick
-            (UpdateMemberAssignment (GameId game.id)
-                { id = userInfo.id, role = Watcher, username = userInfo.username, accepted = False }
-            )
-        ]
+    Element.row [ spacing 5 ]
         [ Element.text userInfo.username
-        , icon [] Solid.plus
+        , inviteListEntryButton game userInfo WhitePlayer "Invite as White"
+        , inviteListEntryButton game userInfo BlackPlayer "Invite as Black"
+        , inviteListEntryButton game userInfo Watcher "Invite as Watcher"
         ]
+
+
+inviteListEntryButton : GameHeader -> UserInfo -> MemberRole -> String -> Element Msg
+inviteListEntryButton game userInfo role caption =
+    let
+        label =
+            Element.row [ spacing 5 ]
+                [ icon [] Solid.plus
+                , Element.text caption
+                ]
+
+        gameMember =
+            { id = userInfo.id
+            , role = role
+            , username = userInfo.username
+            , accepted = False
+            }
+    in
+    Input.button []
+        { label = label
+        , onPress = Just (UpdateMemberAssignment (GameId game.id) gameMember)
+        }
 
 
 gameDetailView : Model -> GameHeader -> Element Msg
