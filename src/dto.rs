@@ -31,6 +31,7 @@ pub struct Member {
     pub id: i64,
     pub username: String,
     pub role: MemberRole,
+    pub accepted: bool,
 }
 
 /// The integers should be server only, the tags should be send to the client.
@@ -39,7 +40,6 @@ pub enum MemberRole {
     WhitePlayer = 1,
     BlackPlayer = 2,
     Watcher = 3,
-    Invited = 4,
 }
 
 /// This implementation is important for database mapping.
@@ -47,12 +47,11 @@ impl rusqlite::types::FromSql for MemberRole {
     fn column_result(value: rusqlite::types::ValueRef) -> rusqlite::types::FromSqlResult<Self> {
         use rusqlite::types::FromSqlError::{InvalidType, OutOfRange};
         use rusqlite::types::ValueRef::Integer;
-        use MemberRole::{BlackPlayer, Invited, Watcher, WhitePlayer};
+        use MemberRole::{BlackPlayer, Watcher, WhitePlayer};
         match value {
             Integer(1) => Ok(WhitePlayer),
             Integer(2) => Ok(BlackPlayer),
             Integer(3) => Ok(Watcher),
-            Integer(4) => Ok(Invited),
             Integer(n) => Err(OutOfRange(n)),
             _ => Err(InvalidType),
         }

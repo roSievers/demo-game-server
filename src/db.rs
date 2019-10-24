@@ -62,9 +62,10 @@ fn create_game_(
 
     let default_role = 1;
 
+    // The user automatically accepts their own game invite.
     conn.execute(
-        "INSERT INTO game_member (user, game, role) VALUES \
-         ((select id from user where username = ?1), ?2, ?3)",
+        "INSERT INTO game_member (user, game, role, accepted) VALUES \
+         ((select id from user where username = ?1), ?2, ?3, 1)",
         params![username, game_id, default_role],
     )?;
 
@@ -111,7 +112,7 @@ fn games_by_user_(username: &str, conn: &Connection) -> Result<Vec<dto::GameHead
 /// This function takes a game id and returns all members of the game.
 fn members_by_game_(game: i64, conn: &Connection) -> Result<Vec<dto::Member>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "select user.id, user.username, game_member.role from game_member \
+        "select user.id, user.username, game_member.role, game_member.accepted from game_member \
          inner join user on user.id = game_member.user \
          where game_member.game = ?1",
     )?;
@@ -120,6 +121,7 @@ fn members_by_game_(game: i64, conn: &Connection) -> Result<Vec<dto::Member>, ru
             id: row.get(0)?,
             username: row.get(1)?,
             role: row.get(2)?,
+            accepted: row.get(3)?,
         })
     })?;
     let mut members = Vec::new();
@@ -127,6 +129,76 @@ fn members_by_game_(game: i64, conn: &Connection) -> Result<Vec<dto::Member>, ru
         members.push(member?);
     }
     Ok(members)
+}
+
+fn member_info_(
+    game_id: i64,
+    user_id: i64,
+    conn: &Connection,
+) -> Result<Option<dto::Member>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "select user.id, user.username, game_member.role, game_member.accepted from game_member \
+         inner join user on user.id = game_member.user \
+         where game_member.game = ?1
+           and game_member.user = ?2",
+    )?;
+    let mut member_iter = stmt.query_map(params![game_id, user_id], |row| {
+        Ok(dto::Member {
+            id: row.get(0)?,
+            username: row.get(1)?,
+            role: row.get(2)?,
+            accepted: row.get(3)?,
+        })
+    })?;
+
+    if let Some(row) = member_iter.next() {
+        Ok(Some(row?))
+    } else {
+        Ok(None)
+    }
+}
+
+/// This function updates an existing member_info object. This matches via
+/// the unique key (user_id, game_id) and does not change these values.
+fn update_member_info_(
+    game_id: i64,
+    member_info: dto::Member,
+    conn: &Connection,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "update game_member
+        set role = ?1,
+            accepted = ?2
+        where user = ?3 and game = ?4",
+        params![
+            member_info.role,
+            member_info.accepted,
+            member_info.id,
+            game_id
+        ],
+    )?;
+
+    Ok(())
+}
+
+/// This function inserts a new member_info object. This requires that
+/// the unique key (user_id, game_id) is not used yet.
+fn insert_member_info_(
+    game_id: i64,
+    member_info: dto::Member,
+    conn: &Connection,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "insert into game_member (user, game, role, accepted) values (?1, ?2, ?3, ?4)",
+        params![
+            member_info.id,
+            game_id,
+            member_info.role,
+            member_info.accepted,
+        ],
+    )?;
+
+    Ok(())
 }
 
 pub fn game(
@@ -198,7 +270,7 @@ fn update_description_(
     conn: &Connection,
 ) -> Result<(), Error> {
     // TODO: The database module will contain business logic, until actix
-    // updates to async await. Then we can will it outside.
+    // updates to async await. Then we can move it outside.
 
     // Check if the user is a member of the game
     let user_id = get_user_id_(username, conn)?;
@@ -226,5 +298,47 @@ fn get_user_id_(username: String, conn: &Connection) -> Result<Option<i64>, Erro
         Ok(Some(row?))
     } else {
         Ok(None)
+    }
+}
+
+pub fn update_member(
+    username: String,
+    game_id: i64,
+    new_member: dto::Member,
+    pool: &Pool,
+) -> impl Future<Item = (), Error = actix_web::Error> {
+    let pool = pool.clone();
+    web::block(move || update_member_(username, game_id, new_member, &pool.get()?)).from_err()
+}
+
+fn update_member_(
+    username: String,
+    game_id: i64,
+    mut new_member: dto::Member,
+    conn: &Connection,
+) -> Result<(), Error> {
+    // TODO: The database module will contain business logic, until actix
+    // updates to async await. Then we can move it outside.
+
+    if let Some(user_id) = get_user_id_(username, conn)? {
+        if member_info_(game_id, user_id, conn)?.is_none() {
+            // The user giving the command is not part of the game.
+            return Ok(());
+        } else if let Some(mut member_info) = member_info_(game_id, new_member.id, conn)? {
+            member_info.role = new_member.role;
+
+            update_member_info_(game_id, member_info, conn)?;
+        } else {
+            // We make sure that the client can't decide to accept the request
+            // for another user.
+            new_member.accepted = false;
+
+            insert_member_info_(game_id, new_member, conn)?;
+        }
+
+        Ok(())
+    } else {
+        // TODO: Fail with error
+        Ok(())
     }
 }

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `game` (
 	`description`	TEXT NOT NULL
 );
 
+-- We create three example games
 INSERT INTO `game` (id, description) VALUES (1, `A shared game`);
 INSERT INTO `game` (id, description) VALUES (2, `Rolf's game`);
 INSERT INTO `game` (id, description) VALUES (3, `Doro's game`);
@@ -31,15 +32,16 @@ CREATE TABLE IF NOT EXISTS `game_member` (
     `user`  INTEGER NOT NULL,
     `game`  INTEGER NOT NULL,
     `role`  INTEGER NOT NULL,
+	`accepted`	INTEGER NOT NULL DEFAULT 0,
     UNIQUE(`user`,`game`)
 );
 
 -- Both players join game 1, rolf is player 1, doro is player 2
-INSERT INTO `game_member` (user, game, role) VALUES (1, 1, 1);
-INSERT INTO `game_member` (user, game, role) VALUES (2, 1, 2);
+INSERT INTO `game_member` (user, game, role, accepted) VALUES (1, 1, 1, 1);
+INSERT INTO `game_member` (user, game, role, accepted) VALUES (2, 1, 2, 1);
 
 -- Only rolf joins game 2, he is player 1
-INSERT INTO `game_member` (user, game, role) VALUES (1, 2, 1);
+INSERT INTO `game_member` (user, game, role, accepted) VALUES (1, 2, 1, 1);
 
 -- Only doro joins game 3, she is player 1
-INSERT INTO `game_member` (user, game, role) VALUES (2, 3, 1);
+INSERT INTO `game_member` (user, game, role, accepted) VALUES (2, 3, 1, 1);

@@ -329,7 +329,11 @@ fn game_setup(
                     .map_err(actix_web::Error::from)
                     .map(|()| HttpResponse::Ok().json(())),
             ),
-            UpdateMember(_) => Box::new(futures::future::ok(HttpResponse::Ok().json(()))),
+            UpdateMember(member) => Box::new(
+                db::update_member(user, path.0, member, &db)
+                    .map_err(actix_web::Error::from)
+                    .map(|()| HttpResponse::Ok().json(())),
+            ),
         };
     } else {
         return Box::new(futures::future::ok(
@@ -349,6 +353,7 @@ fn dummy_example(// id: Identity,
             id: 99,
             username: "Rolf".to_owned(),
             role: dto::MemberRole::Watcher,
+            accepted: true,
         }),
     ];
 

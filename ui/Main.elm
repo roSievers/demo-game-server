@@ -85,6 +85,7 @@ type Msg
     | GameCreated GameHeader
     | ReloadFriends
     | GameReload GameId
+    | UpdateMemberAssignment GameId GameMember
 
 
 init : Value -> Url -> Navigation.Key -> ( Model, Cmd Msg )
@@ -247,6 +248,11 @@ update msg model =
 
         CancelUpdateGameDescription ->
             ( { model | changeGameDescription = Nothing }, Cmd.none )
+
+        UpdateMemberAssignment gameId gameMember ->
+            ( model
+            , postSetupMessage gameId (UpdateMember gameMember)
+            )
 
 
 appendReceivedGameList : GameHeader -> Model -> Model
@@ -475,22 +481,21 @@ singleGame model (GameId id) =
     Element.column []
         [ Input.button [] { label = Element.text "Return to Dashboard", onPress = Just OpenDashboard }
         , gameElement
-        , friendList model
         ]
 
 
-friendList : Model -> Element Msg
-friendList model =
+friendList : Model -> GameHeader -> Element Msg
+friendList model game =
     Element.column []
         ([ Element.text "Invite friends to this game."
          , Input.button [] { label = Element.text "Refresh friends list", onPress = Just ReloadFriends }
          ]
-            ++ actualFriendList model
+            ++ friendListRemoteExtractor model game
         )
 
 
-actualFriendList : Model -> List (Element Msg)
-actualFriendList model =
+friendListRemoteExtractor : Model -> GameHeader -> List (Element Msg)
+friendListRemoteExtractor model game =
     case model.friends of
         RemoteData.NotAsked ->
             [ Element.text "Please refresh your friends list" ]
@@ -502,8 +507,41 @@ actualFriendList model =
             [ Element.text "Error while loading friends list. Try refreshing." ]
 
         RemoteData.Success friends ->
+            inviteList model game friends
+
+
+inviteList : Model -> GameHeader -> List UserInfo -> List (Element Msg)
+inviteList _ game friends =
+    let
+        notInvolved =
             friends
-                |> List.map (\friend -> Element.text friend.username)
+                |> List.filter (\userInfo -> not (userIsMember userInfo.id game))
+    in
+    if List.length notInvolved > 0 then
+        List.map (inviteListEntry game) notInvolved
+
+    else
+        [ Element.text "All your friends are already in the game." ]
+
+
+userIsMember : Int -> GameHeader -> Bool
+userIsMember userId game =
+    game.members
+        |> List.any (\member -> member.id == userId)
+
+
+inviteListEntry : GameHeader -> UserInfo -> Element Msg
+inviteListEntry game userInfo =
+    Element.row
+        [ spacing 5
+        , Events.onClick
+            (UpdateMemberAssignment (GameId game.id)
+                { id = userInfo.id, role = Watcher, username = userInfo.username, accepted = False }
+            )
+        ]
+        [ Element.text userInfo.username
+        , icon [] Solid.plus
+        ]
 
 
 gameDetailView : Model -> GameHeader -> Element Msg
@@ -511,6 +549,7 @@ gameDetailView model game =
     Element.column [ spacing 15 ]
         [ gameDescriptionView model game
         , memberTable game
+        , friendList model game
         ]
 
 
@@ -578,9 +617,6 @@ roleTag role =
         Watcher ->
             Element.row [] [ icon [] Solid.eye, Element.text "Watcher" ]
 
-        Invited ->
-            Element.row [] [ icon [] Solid.envelope, Element.text "Invited" ]
-
 
 icon : List (Attribute msg) -> Icon -> Element msg
 icon attributes iconSvg =
@@ -603,7 +639,6 @@ type MemberRole
     = WhitePlayer
     | BlackPlayer
     | Watcher
-    | Invited
 
 
 fromStringMemberRole : String -> Decoder MemberRole
@@ -611,9 +646,6 @@ fromStringMemberRole string =
     case string of
         "BlackPlayer" ->
             Decode.succeed BlackPlayer
-
-        "Invited" ->
-            Decode.succeed Invited
 
         "Watcher" ->
             Decode.succeed Watcher
@@ -636,9 +668,6 @@ toStringMemberRole role =
 
         Watcher ->
             "Watcher"
-
-        Invited ->
-            "Invited"
 
 
 decodeMemberRole : Decoder MemberRole
@@ -727,15 +756,17 @@ type alias GameMember =
     { id : Int
     , username : String
     , role : MemberRole
+    , accepted : Bool
     }
 
 
 decodeGameMember : Decode.Decoder GameMember
 decodeGameMember =
-    Decode.map3 GameMember
+    Decode.map4 GameMember
         (Decode.field "id" Decode.int)
         (Decode.field "username" Decode.string)
         (Decode.field "role" decodeMemberRole)
+        (Decode.field "accepted" Decode.bool)
 
 
 encodeGameMember : GameMember -> Value
@@ -744,6 +775,7 @@ encodeGameMember gameMember =
         [ ( "id", Encode.int <| gameMember.id )
         , ( "username", Encode.string <| gameMember.username )
         , ( "role", encodeMemberRole <| gameMember.role )
+        , ( "accepted", Encode.bool <| gameMember.accepted )
         ]
 
 
@@ -811,6 +843,8 @@ loadFriendList =
 
 type SetupMessage
     = SetDescription String
+      -- TODO: The GameMember type alias contains information that we do not need
+      -- to send to the server. We should send a specialized type for this.
     | UpdateMember GameMember
 
 
