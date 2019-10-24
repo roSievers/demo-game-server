@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 
 <head>
@@ -6,6 +7,7 @@
 </head>
 
 <body>
+  <!-- You can find the source code on https://github.com/roSievers/demo-game-server -->
   <script>
     let flags = {{ flags|json }};
 
