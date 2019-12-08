@@ -74,3 +74,39 @@ pub enum SetupMessage {
     SetDescription(String),
     UpdateMember(Member),
 }
+
+/// The integers should be server only, the tags should be send to the client.
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum ReadyState {
+    /// The user has been invited to the game but has not accepted the request.
+    Invited = 1,
+    /// The user has accepted the invite, but is not ready to start playing.
+    Accepted = 2,
+    /// The user is ready to start playing the game. When all players declare
+    /// themself ready, the game should start.
+    Ready = 3,
+}
+
+/// This implementation is important for database mapping.
+impl rusqlite::types::FromSql for ReadyState {
+    fn column_result(value: rusqlite::types::ValueRef) -> rusqlite::types::FromSqlResult<Self> {
+        use rusqlite::types::FromSqlError::{InvalidType, OutOfRange};
+        use rusqlite::types::ValueRef::Integer;
+        use ReadyState::*;
+        match value {
+            Integer(1) => Ok(Invited),
+            Integer(2) => Ok(Accepted),
+            Integer(3) => Ok(Ready),
+            Integer(n) => Err(OutOfRange(n)),
+            _ => Err(InvalidType),
+        }
+    }
+}
+
+impl rusqlite::types::ToSql for ReadyState {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput> {
+        use rusqlite::types::ToSqlOutput::Owned;
+        use rusqlite::types::Value::Integer;
+        Ok(Owned(Integer(*self as i64)))
+    }
+}
